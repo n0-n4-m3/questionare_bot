@@ -7,6 +7,12 @@ from typing import Any
 from aiohttp import web
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
+from aiogram import Bot, Dispatcher, html
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import Message
+
 from tech_fields import *
 
 import json
@@ -20,7 +26,8 @@ class Question:
     variants: list = field(default_factory=list)
     answer: str = "-"
 
-que_json = json.load(open("./questions/light_of_gospel.json"))
+filename = "questionnaire_masair"
+que_json = json.load(open(f"./questions/{filename}.json"))
 QUESTIONS = []
 for que in que_json["questions"].values():
     if que["type"] == "poll":
@@ -29,18 +36,56 @@ for que in que_json["questions"].values():
         QUESTIONS.append(Question(text=que["text"], type=que["type"]))
 QUESTIONS.append(Question(text="Ваш профиль в телеграмме скрытый, напишите ваш номер телефона, чтобы с вами могли связаться", type="text"))
     
-# print(QUESTIONS)
+print(QUESTIONS)
 
 class QuizScene(Scene, state="quiz"):
 
     @on.poll_answer.enter()
+    async def on_enter_poll(self, pollanswer: PollAnswer, state: FSMContext, step: int | None = 0) -> Any:
+        if step == len(QUESTIONS) - 1:
+            if (hasattr(message, "from_user") and message.from_user.username is not None) or (hasattr(message, "user") and message.user.username is not None): #type: ignore
+                data = await state.get_data()
+                
+                answers = data.get("answers", {})
+                if hasattr(pollanswer, "from_user"):
+                    answers[step] = "https://t.me/" + message.from_user.username #type: ignore
+                else:
+                    answers[step] = "https://t.me/" + message.user.username #type: ignore
+                return await self.wizard.exit()
+            # else:
+            #     await self.wizard.retake(step=step+1) #type: ignore
+        elif step == len(QUESTIONS):
+            data = await state.get_data()
+            answers = data.get("answers", {})
+            answers[step-1] = "https://t.me/" + answers[step-1] #type: ignore
+            return await self.wizard.exit()
+
+        markup = ReplyKeyboardBuilder()
+        if step > 0: # type: ignore 1
+            markup.button(text="🔙 Назад")
+
+        await state.update_data(step=step)
+        if QUESTIONS[step].type == "poll": #type: ignore
+            return await bot.send_poll(chat_id=pollanswer.user.id, #type: ignore
+                        question=QUESTIONS[step].text, #type: ignore
+                        options=QUESTIONS[step].variants, #type: ignore
+                        is_anonymous=False, 
+                        reply_markup=markup.adjust(2).as_markup(resize_keyboard=True),)
+        try:
+            return await bot.send_message(chat_id=pollanswer.user.id, #type: ignore
+                text=QUESTIONS[step].text, # type: ignore
+                reply_markup=markup.adjust(2).as_markup(resize_keyboard=True),
+            )
+        except:
+            print("boyya")
+
     @on.message.enter()
     async def on_enter(self, message: Message, state: FSMContext, step: int | None = 0) -> Any:
         if not step:
             await message.answer(que_json["start_text"])
         
         if step == len(QUESTIONS) - 1:
-            if (hasattr(message, "from_user") and message.from_user.username is not None) or (message.user.username is not None): #type: ignore
+            if (hasattr(message, "from_user") and message.from_user.username is not None) or (hasattr(message, "user") and message.user.username is not None): #type: ignore
                 data = await state.get_data()
                 
                 answers = data.get("answers", {})
@@ -49,8 +94,13 @@ class QuizScene(Scene, state="quiz"):
                 else:
                     answers[step] = "https://t.me/" + message.user.username #type: ignore
                 return await self.wizard.exit()
-            else:
-                await self.wizard.retake(step=step+1) #type: ignore
+            # else:
+            #     await self.wizard.retake(step=step+1) #type: ignore
+        elif step == len(QUESTIONS):
+            data = await state.get_data()
+            answers = data.get("answers", {})
+            answers[step-1] = "https://t.me/" + answers[step-1] #type: ignore
+            return await self.wizard.exit()
 
         markup = ReplyKeyboardBuilder()
         if step > 0: # type: ignore
@@ -59,10 +109,9 @@ class QuizScene(Scene, state="quiz"):
         await state.update_data(step=step)
         if QUESTIONS[step].type == "poll": #type: ignore
             return await message.answer_poll(question=QUESTIONS[step].text, #type: ignore
-                            options=QUESTIONS[step].variants, #type: ignore
-                            is_anonymous=False, 
-                            reply_markup=markup.adjust(2).as_markup(resize_keyboard=True),
-        )
+                        options=QUESTIONS[step].variants, #type: ignore
+                        is_anonymous=False, 
+                        reply_markup=markup.adjust(2).as_markup(resize_keyboard=True),)
         try:
             return await message.answer(
                 text=QUESTIONS[step].text, # type: ignore
@@ -77,13 +126,16 @@ class QuizScene(Scene, state="quiz"):
         answers = data.get("answers", {})
         questionnaire = zip([x.text for x in QUESTIONS], answers.values())
         
-        text = "Спасибо, ваша заявка принята"
+        if que_json["end_text"] != None:
+            text = que_json["end_text"]
+        else:
+            text = "Спасибо, ваша заявка принята"
         # for x,y in questionnaire:
         #     text = text + f"{x}: {y}\n"
         
-        users = json.load(open("./users.json"))
+        users = json.load(open(f"./users_{filename}.json"))
         users["users"].append(poll_answer.user.id) #type: ignore
-        json.dump(users, open("./users.json", "w"))
+        json.dump(users, open(f"./users_{filename}.json", "w"))
         
         sheet.append_row(list(answers.values()))
         await poll_answer.bot.send_message(chat_id=poll_answer.user.id, text=text, reply_markup=ReplyKeyboardRemove()) # type: ignore
@@ -95,13 +147,16 @@ class QuizScene(Scene, state="quiz"):
         answers = data.get("answers", {})
         questionnaire = zip([x.text for x in QUESTIONS], answers.values())
         
-        text = "Спасибо, ваша заявка принята"
+        if que_json["end_text"] != None:
+            text = que_json["end_text"]
+        else:
+            text = "Спасибо, ваша заявка принята"
         # for x,y in questionnaire:
         #     text = text + f"{x}: {y}\n"
         
-        users = json.load(open("./users.json"))
+        users = json.load(open(f"./users_{filename}.json"))
         users["users"].append(message.from_user.id) #type: ignore
-        json.dump(users, open("./users.json", "w"))
+        json.dump(users, open(f"./users_{filename}.json", "w"))
         
         sheet.append_row(list(answers.values()))
         await message.answer(text, reply_markup=ReplyKeyboardRemove())
@@ -124,7 +179,7 @@ class QuizScene(Scene, state="quiz"):
         answers = data.get("answers", {})
         
         answer_id = poll_answer.option_ids[0]
-        if QUESTIONS[step].variants[answer_id] == QUESTIONS[step].variants[-1]:
+        if QUESTIONS[step].variants[answer_id] == QUESTIONS[step].variants[-1] and QUESTIONS[step].variants[answer_id] == "Свой вариант":
             await poll_answer.bot.send_message( #type: ignore
                 chat_id=poll_answer.user.id, #type: ignore
                 text="Вы выбрали 'Свой вариант'. Пожалуйста, напишите его:",)
@@ -132,6 +187,7 @@ class QuizScene(Scene, state="quiz"):
         else:
             answers[step] = QUESTIONS[step].variants[answer_id]  # перезаписываем "Свой вариант" на реальный текст
             await state.update_data(answers=answers, awaiting_custom_answer_for_step=None)
+            print("was there")
             await self.wizard.retake(step=step+1)
             
     @on.message(F.text)
@@ -174,27 +230,28 @@ async def on_startup() -> None:
     await bot.set_webhook(url=f"{BASE_URL}{WEBHOOK_PATH}",allowed_updates=["message", "chat_member"])
     
 async def on_shutdown() -> None:
-    await bot.delete_webhook(drop_pending_updates=True)
+    # await bot.delete_webhook(drop_pending_updates=True)
     await bot.session.close()
 
 
 def main():
     dp = create_dispatcher()
-    dp.startup.register(on_startup)
+    bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)) 
+    # dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
     
-    app = web.Application()
+    # app = web.Application()
     
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot
-    )
-    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-    setup_application(app, dp, bot=bot)
+    # webhook_requests_handler = SimpleRequestHandler(
+        # dispatcher=dp,
+        # bot=bot
+    # )
+    # webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    # setup_application(app, dp, bot=bot)
 
-    web.run_app(app, host=HOST, port=PORT)
-    
-    # await dp.start_polling(bot)
+    # web.run_app(app, host=HOST, port=PORT)
+    # asyncio.run(bot.delete_webhook())
+    asyncio.run(dp.start_polling(bot))
 
 
 if __name__ == "__main__":
