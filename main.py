@@ -187,7 +187,6 @@ class QuizScene(Scene, state="quiz"):
         else:
             answers[step] = QUESTIONS[step].variants[answer_id]  # перезаписываем "Свой вариант" на реальный текст
             await state.update_data(answers=answers, awaiting_custom_answer_for_step=None)
-            print("was there")
             await self.wizard.retake(step=step+1)
             
     @on.message(F.text)
