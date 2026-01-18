@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from os import getenv
 from typing import Any
 
 from aiohttp import web
@@ -16,8 +15,6 @@ from aiogram.types import Message
 from tech_fields import *
 
 import json
-
-TOKEN = getenv("BOT_TOKEN")
 
 @dataclass
 class Question:
@@ -236,21 +233,21 @@ async def on_shutdown() -> None:
 def main():
     dp = create_dispatcher()
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)) 
-    # dp.startup.register(on_startup)
+    dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
     
-    # app = web.Application()
+    app = web.Application()
     
-    # webhook_requests_handler = SimpleRequestHandler(
-        # dispatcher=dp,
-        # bot=bot
-    # )
-    # webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-    # setup_application(app, dp, bot=bot)
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot
+    )
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
 
-    # web.run_app(app, host=HOST, port=PORT)
-    # asyncio.run(bot.delete_webhook())
-    asyncio.run(dp.start_polling(bot))
+    web.run_app(app, host=HOST, port=PORT)
+    asyncio.run(bot.delete_webhook())
+    # asyncio.run(dp.start_polling(bot))
 
 
 if __name__ == "__main__":
