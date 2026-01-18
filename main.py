@@ -151,9 +151,9 @@ class QuizScene(Scene, state="quiz"):
         # for x,y in questionnaire:
         #     text = text + f"{x}: {y}\n"
         
-        users = json.load(open(f"./users_{filename}.json"))
+        users = json.load(open(f"./users/users_{filename}.json"))
         users["users"].append(message.from_user.id) #type: ignore
-        json.dump(users, open(f"./users_{filename}.json", "w"))
+        json.dump(users, open(f"./users/users_{filename}.json", "w"))
         
         sheet.append_row(list(answers.values()))
         await message.answer(text, reply_markup=ReplyKeyboardRemove())
